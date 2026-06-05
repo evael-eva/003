@@ -7,13 +7,15 @@
 ### 方式一：GitHub Actions 自动打包（推荐）
 
 #### 前置条件
-
+git config --global https.proxy http://127.0.0.1:10809
+git remote add origin https://ghproxy.com/https://github.com/evael-eva/001.git
 1. **代码已推送到 GitHub 仓库**
    ```bash
+   git remote remove origin
    git init
    git add .
    git commit -m "Initial commit"
-   git remote add origin https://github.com/evael-eva/your-repo.git
+   git remote add origin https://github.com/evael-eva/001.git
    git push -u origin main
    ```
 

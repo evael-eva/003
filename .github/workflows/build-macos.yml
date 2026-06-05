@@ -10,89 +10,115 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-macos:
-    name: Build for macOS
+  # ===== v21: 盘口监控邮件提醒 =====
+  build-v21:
+    name: Build v21 - 盘口监控
     runs-on: macos-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        
-    - name: Cache pip dependencies
-      uses: actions/cache@v4
+    - uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-v2-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-v2-
-          
-    - name: Install Python dependencies
+        key: ${{ runner.os }}-pip-v3-${{ hashFiles('requirements.txt') }}
+        restore-keys: ${{ runner.os }}-pip-v3-
+
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip setuptools wheel
         pip install -r requirements.txt
-        
-    - name: Build with PyInstaller
+
+    - name: Build
       run: |
         cd v21
-        echo "=== Building ==="
-        pyinstaller --clean --log-level=INFO --noconfirm 盘口监控邮件提醒.spec 2>&1
-        echo "=== Build exit code: $? ==="
-        ls -lh dist/ 2>/dev/null || echo "No dist folder"
-        ls -lh build/ 2>/dev/null || echo "No build folder"
-        
-    - name: Check output
-      run: |
-        echo "=== v21/dist/ ==="
-        find v21/dist -type f -o -type d 2>/dev/null | head -50
-        echo ""
-        if [ -d "v21/dist/盘口监控邮件提醒.app" ]; then
-          echo "✅ .app bundle found!"
-        elif [ -f "v21/dist/盘口监控邮件提醒" ]; then
-          echo "✅ binary found (no bundle)"
-        else
-          echo "⚠️ No expected output found"
-        fi
-        
-    - name: Create DMG
+        pyinstaller --clean --noconfirm 盘口监控邮件提醒.spec
+
+    - name: Package
       run: |
         if [ -d "v21/dist/盘口监控邮件提醒.app" ]; then
           hdiutil create -volname "盘口监控邮件提醒" \
             -srcfolder "v21/dist/盘口监控邮件提醒.app" \
-            -ov -format UDZO \
-            "v21/dist/盘口监控邮件提醒.dmg"
-          ls -lh v21/dist/*.dmg
-        elif [ -f "v21/dist/盘口监控邮件提醒" ]; then
-          # 如果没有 .app，打包成 .zip
-          cd v21/dist
-          zip -r 盘口监控邮件提醒-mac.zip 盘口监控邮件提醒
-          ls -lh *.zip
+            -ov -format UDZO "v21/dist/盘口监控邮件提醒.dmg"
+        elif [ -f "v21/dist/盘口监控邮件提醒/盘口监控邮件提醒" ]; then
+          cd v21/dist && zip -r 盘口监控邮件提醒-mac.zip 盘口监控邮件提醒
         fi
-        
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+
+    - uses: actions/upload-artifact@v4
       with:
-        name: macOS-Build
+        name: v21-盘口监控邮件提醒
         path: |
           v21/dist/盘口监控邮件提醒.app
           v21/dist/盘口监控邮件提醒.dmg
           v21/dist/盘口监控邮件提醒-mac.zip
-          v21/dist/盘口监控邮件提醒
         retention-days: 30
         if-no-files-found: warn
-        
-    - name: Create Release (on tag)
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
+
+  # ===== v22: 比赛初盘筛选工具 =====
+  build-v22:
+    name: Build v22 - 初盘筛选工具
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
       with:
-        files: |
-          v21/dist/盘口监控邮件提醒.app
-          v21/dist/盘口监控邮件提醒.dmg
-          v21/dist/盘口监控邮件提醒-mac.zip
+        python-version: '3.10'
+    - uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-v3-${{ hashFiles('requirements.txt') }}
+        restore-keys: ${{ runner.os }}-pip-v3-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+
+    - name: Build
+      run: |
+        cd v22_filter_tool
+        pyinstaller --clean --noconfirm 比赛初盘筛选工具.spec
+
+    - name: Package
+      run: |
+        if [ -d "v22_filter_tool/dist/比赛初盘筛选工具.app" ]; then
+          hdiutil create -volname "比赛初盘筛选工具" \
+            -srcfolder "v22_filter_tool/dist/比赛初盘筛选工具.app" \
+            -ov -format UDZO "v22_filter_tool/dist/比赛初盘筛选工具.dmg"
+        elif [ -f "v22_filter_tool/dist/比赛初盘筛选工具/比赛初盘筛选工具" ]; then
+          cd v22_filter_tool/dist && zip -r 比赛初盘筛选工具-mac.zip 比赛初盘筛选工具
+        fi
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: v22-比赛初盘筛选工具
+        path: |
+          v22_filter_tool/dist/比赛初盘筛选工具.app
+          v22_filter_tool/dist/比赛初盘筛选工具.dmg
+          v22_filter_tool/dist/比赛初盘筛选工具-mac.zip
+        retention-days: 30
+        if-no-files-found: warn
+
+  # ===== Release (on tag) =====
+  release:
+    name: Create Release
+    needs: [ build-v21, build-v22 ]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: 'v*'
+        merge-multiple: true
+        path: artifacts
+
+    - name: List artifacts
+      run: find artifacts -type f
+
+    - uses: softprops/action-gh-release@v2
+      with:
+        files: artifacts/**
         draft: false
         prerelease: false
         generate_release_notes: true
