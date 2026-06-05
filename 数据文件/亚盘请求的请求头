@@ -1,0 +1,78 @@
+请求网址
+https://vip.titan007.com/changeDetail/handicap.aspx?id=2961169&companyID=3&l=0
+请求方法
+GET
+状态代码
+200 OK
+远程地址
+61.143.225.88:443
+引荐来源网址政策
+unsafe-url
+cache-control
+public, max-age=9
+content-encoding
+gzip
+content-length
+2838
+content-type
+text/html; charset=gb2312
+date
+Wed, 15 Apr 2026 13:06:40 GMT
+expires
+Wed, 15 Apr 2026 13:06:49 GMT
+last-modified
+Wed, 15 Apr 2026 13:06:39 GMT
+referrer-policy
+unsafe-url
+server
+Titan007/DX63SV
+titan007cdn-cachestatus
+MISS
+vary
+Accept-Encoding
+x-frame-options
+SAMEORIGIN
+x-xss-protection
+1; mode=block
+:authority
+vip.titan007.com
+:method
+GET
+:path
+/changeDetail/handicap.aspx?id=2961169&companyID=3&l=0
+:scheme
+https
+accept
+text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+zh,zh-TW;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6
+cache-control
+no-cache
+cookie
+b-user-id=a7f93b80-e642-0d71-94d1-1cc4576514c6; letgoalSettingSolution=; detailCookie=null; ishidepcad=; Hm_lvt_a88664a99dbcb9c7c07dc420114041b3=1773720401,1775723609; HMACCOUNT=DC1D86079E63CA12; Hm_lvt_3c285e4976a3c4fb2124b4d51dd1801e=1774270674,1775730459; totalSettingSolution=; Hm_lpvt_3c285e4976a3c4fb2124b4d51dd1801e=1776258084; Hm_lpvt_a88664a99dbcb9c7c07dc420114041b3=1776258394; xallpubLinkMatch=4f450e0644019ed94385423f0ce7ea1c157b9f21df0fb08df4bb91d57a5cc8084b024934ca5b6156b431345d9f235f950e6ef711de1ad4ea1b2e8e66f16e73ccfffbd80f53b1f2ed73850715dd19a5d704dc7fd9d1992b62a0c5f605bd89a271bb31123c8dbc8c2e8ec000e05ab07806101390c2ebc9d9cbe378bf3b73b8ae80b0350d14adc3aed05be42dc4b432be945686cab789b2191862bbd0a4a05e9865153af293e1e8b3f0536b27de15217ab66fa5d8fb83d51428b7b3cc8f9e36ac4b
+pragma
+no-cache
+priority
+u=0, i
+referer
+https://vip.titan007.com/AsianOdds_n.aspx?id=2961169&l=0
+sec-ch-ua
+"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+document
+sec-fetch-mode
+navigate
+sec-fetch-site
+same-origin
+sec-fetch-user
+?1
+upgrade-insecure-requests
+1
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36

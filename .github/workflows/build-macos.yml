@@ -1,0 +1,94 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-macos:
+    name: Build for macOS
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller PyQt5 DrissionPage requests beautifulsoup4
+        
+    - name: Verify installation
+      run: |
+        python -c "import PyQt5; print('PyQt5:', PyQt5.__version__)"
+        python -c "import DrissionPage; print('DrissionPage installed')"
+        python -c "import requests; print('requests:', requests.__version__)"
+        
+    - name: Build with PyInstaller
+      run: |
+        cd v21
+        pyinstaller --clean 盘口监控邮件提醒.spec
+        
+    - name: List build output
+      run: |
+        echo "=== Build Output ==="
+        ls -lh dist/
+        echo ""
+        echo "=== App Bundle Contents ==="
+        if [ -d "dist/盘口监控邮件提醒.app" ]; then
+          ls -lh "dist/盘口监控邮件提醒.app/Contents/MacOS/"
+        fi
+        
+    - name: Create DMG (Optional)
+      run: |
+        # 如果 dist 目录中有 .app 文件，创建 DMG
+        if [ -d "dist/盘口监控邮件提醒.app" ]; then
+          # 使用 hdiutil 创建 DMG
+          hdiutil create -volname "盘口监控邮件提醒" \
+            -srcfolder "dist/盘口监控邮件提醒.app" \
+            -ov -format UDZO \
+            "dist/盘口监控邮件提醒.dmg"
+          echo "✅ DMG created successfully"
+          ls -lh dist/*.dmg
+        else
+          echo "⚠️ No .app bundle found, skipping DMG creation"
+        fi
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macOS-Build
+        path: |
+          dist/盘口监控邮件提醒.app
+          dist/盘口监控邮件提醒.dmg
+        retention-days: 30
+        
+    - name: Create Release (on tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/盘口监控邮件提醒.app
+          dist/盘口监控邮件提醒.dmg
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

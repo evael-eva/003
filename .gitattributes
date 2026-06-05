@@ -1,0 +1,19 @@
+# 统一使用 LF 换行符（Unix 风格）
+* text=auto eol=lf
+
+# Shell 脚本必须使用 LF
+*.sh text eol=lf
+
+# Python 文件使用 LF
+*.py text eol=lf
+
+# Markdown 文件使用 LF
+*.md text eol=lf
+
+# YAML 文件使用 LF
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Windows 批处理文件使用 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf

@@ -1,0 +1,78 @@
+请求网址
+https://vip.titan007.com/changeDetail/handicap.aspx?id=2929562&companyID=3&l=0
+请求方法
+GET
+状态代码
+200 OK
+远程地址
+61.143.225.88:443
+引荐来源网址政策
+unsafe-url
+cache-control
+public, max-age=9
+content-encoding
+gzip
+content-length
+3584
+content-type
+text/html; charset=gb2312
+date
+Wed, 15 Apr 2026 11:54:24 GMT
+expires
+Wed, 15 Apr 2026 11:54:33 GMT
+last-modified
+Wed, 15 Apr 2026 11:54:23 GMT
+referrer-policy
+unsafe-url
+server
+Titan007/DX63SV
+titan007cdn-cachestatus
+MISS
+vary
+Accept-Encoding
+x-frame-options
+SAMEORIGIN
+x-xss-protection
+1; mode=block
+:authority
+vip.titan007.com
+:method
+GET
+:path
+/changeDetail/handicap.aspx?id=2929562&companyID=3&l=0
+:scheme
+https
+accept
+text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+zh,zh-TW;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6
+cache-control
+no-cache
+cookie
+b-user-id=a7f93b80-e642-0d71-94d1-1cc4576514c6; letgoalSettingSolution=; detailCookie=null; ishidepcad=; Hm_lvt_a88664a99dbcb9c7c07dc420114041b3=1773720401,1775723609; HMACCOUNT=DC1D86079E63CA12; Hm_lvt_3c285e4976a3c4fb2124b4d51dd1801e=1774270674,1775730459; totalSettingSolution=; Hm_lpvt_a88664a99dbcb9c7c07dc420114041b3=1776253103; Hm_lpvt_3c285e4976a3c4fb2124b4d51dd1801e=1776253966; xallpubLinkMatch=4f450e0644019ed94385423f0ce7ea1c157b9f21df0fb08df4bb91d57a5cc8084b024934ca5b6156b431345d9f235f950e6ef711de1ad4ea1b2e8e66f16e73ccfffbd80f53b1f2ed5bd64e9f35b9a735e9b3294c35e60d03fd7f12863d9460cb1155297f91f8cf149d4b84fabcf41ed76e8b1f2701fdc30206309b514840db6a90ed422ea6d24c39da2dfd0c44e13fb7d9f38556e8f14d49306daa809394c1bca1f115bdb2242269b8efe894f77921e5862cb24491104d879c275964e1828193bcff8948ee8e803a
+pragma
+no-cache
+priority
+u=0, i
+referer
+https://vip.titan007.com/AsianOdds_n.aspx?id=2929562
+sec-ch-ua
+"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+document
+sec-fetch-mode
+navigate
+sec-fetch-site
+same-origin
+sec-fetch-user
+?1
+upgrade-insecure-requests
+1
+user-agent
+Mozilla/5.0 (Windows NT

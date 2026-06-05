@@ -1,0 +1,17 @@
+# 盘口监控邮件提醒系统 - 依赖包列表
+# 使用方法: pip install -r requirements.txt
+
+# GUI框架
+PyQt5>=5.15.0
+
+# 浏览器自动化（用于盘口筛选）
+DrissionPage>=4.0.0
+
+# HTTP请求
+requests>=2.31.0
+
+# HTML解析
+beautifulsoup4>=4.12.0
+
+# 打包工具（仅开发环境需要）
+pyinstaller>=6.0.0
