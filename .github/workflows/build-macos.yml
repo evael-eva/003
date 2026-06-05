@@ -1,12 +1,13 @@
 name: Build macOS App
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: [ main, master ]
     tags: [ 'v*' ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build-macos:
@@ -26,49 +27,50 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        key: ${{ runner.os }}-pip-v2-${{ hashFiles('requirements.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-
+          ${{ runner.os }}-pip-v2-
           
-    - name: Install dependencies
+    - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller PyQt5 DrissionPage requests beautifulsoup4
-        
-    - name: Verify installation
-      run: |
-        python -c "import PyQt5; print('PyQt5:', PyQt5.__version__)"
-        python -c "import DrissionPage; print('DrissionPage installed')"
-        python -c "import requests; print('requests:', requests.__version__)"
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
         
     - name: Build with PyInstaller
       run: |
         cd v21
-        pyinstaller --clean 盘口监控邮件提醒.spec
+        echo "=== Building ==="
+        pyinstaller --clean --log-level=INFO --noconfirm 盘口监控邮件提醒.spec 2>&1
+        echo "=== Build exit code: $? ==="
+        ls -lh dist/ 2>/dev/null || echo "No dist folder"
+        ls -lh build/ 2>/dev/null || echo "No build folder"
         
-    - name: List build output
+    - name: Check output
       run: |
-        echo "=== Build Output ==="
-        ls -lh dist/
+        echo "=== v21/dist/ ==="
+        find v21/dist -type f -o -type d 2>/dev/null | head -50
         echo ""
-        echo "=== App Bundle Contents ==="
-        if [ -d "dist/盘口监控邮件提醒.app" ]; then
-          ls -lh "dist/盘口监控邮件提醒.app/Contents/MacOS/"
+        if [ -d "v21/dist/盘口监控邮件提醒.app" ]; then
+          echo "✅ .app bundle found!"
+        elif [ -f "v21/dist/盘口监控邮件提醒" ]; then
+          echo "✅ binary found (no bundle)"
+        else
+          echo "⚠️ No expected output found"
         fi
         
-    - name: Create DMG (Optional)
+    - name: Create DMG
       run: |
-        # 如果 dist 目录中有 .app 文件，创建 DMG
-        if [ -d "dist/盘口监控邮件提醒.app" ]; then
-          # 使用 hdiutil 创建 DMG
+        if [ -d "v21/dist/盘口监控邮件提醒.app" ]; then
           hdiutil create -volname "盘口监控邮件提醒" \
-            -srcfolder "dist/盘口监控邮件提醒.app" \
+            -srcfolder "v21/dist/盘口监控邮件提醒.app" \
             -ov -format UDZO \
-            "dist/盘口监控邮件提醒.dmg"
-          echo "✅ DMG created successfully"
-          ls -lh dist/*.dmg
-        else
-          echo "⚠️ No .app bundle found, skipping DMG creation"
+            "v21/dist/盘口监控邮件提醒.dmg"
+          ls -lh v21/dist/*.dmg
+        elif [ -f "v21/dist/盘口监控邮件提醒" ]; then
+          # 如果没有 .app，打包成 .zip
+          cd v21/dist
+          zip -r 盘口监控邮件提醒-mac.zip 盘口监控邮件提醒
+          ls -lh *.zip
         fi
         
     - name: Upload artifacts
@@ -76,17 +78,21 @@ jobs:
       with:
         name: macOS-Build
         path: |
-          dist/盘口监控邮件提醒.app
-          dist/盘口监控邮件提醒.dmg
+          v21/dist/盘口监控邮件提醒.app
+          v21/dist/盘口监控邮件提醒.dmg
+          v21/dist/盘口监控邮件提醒-mac.zip
+          v21/dist/盘口监控邮件提醒
         retention-days: 30
+        if-no-files-found: warn
         
     - name: Create Release (on tag)
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: |
-          dist/盘口监控邮件提醒.app
-          dist/盘口监控邮件提醒.dmg
+          v21/dist/盘口监控邮件提醒.app
+          v21/dist/盘口监控邮件提醒.dmg
+          v21/dist/盘口监控邮件提醒-mac.zip
         draft: false
         prerelease: false
         generate_release_notes: true
