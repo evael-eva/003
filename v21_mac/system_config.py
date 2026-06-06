@@ -106,6 +106,36 @@ class EmailService:
                 return False, str(e2)
 
 
+# ===== macOS .app 配置路径辅助函数 =====
+if sys.platform == 'darwin':
+    APP_NAME = "盘口监控邮件提醒"
+    APP_CONFIG_DIR = os.path.join(os.path.expanduser("~"), "Library", "Application Support", APP_NAME)
+else:
+    APP_CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _get_config_path(filename):
+    """获取配置文件路径（优先用户配置目录，其次.app资源目录）"""
+    import sys as _sys
+    
+    # 1. 用户配置目录（可写）
+    user_path = os.path.join(APP_CONFIG_DIR, filename)
+    
+    # 2. .app 资源目录（打包内置，只读）
+    bundle_path = None
+    try:
+        bundle_path = os.path.join(_sys._MEIPASS, filename)
+    except (AttributeError, ImportError):
+        # 未打包：当前目录
+        return user_path
+    
+    # 打包模式下：用户目录优先
+    if os.path.exists(user_path):
+        return user_path
+    return bundle_path
+
+# ========================================
+
 class SystemConfigDialog(QDialog):
     """系统配置对话框（邮件 + 代理）"""
 
@@ -652,8 +682,9 @@ class SystemConfigDialog(QDialog):
             'receiver_emails': '',
         }
         try:
-            if os.path.exists(self.EMAIL_CONFIG_FILE):
-                with open(self.EMAIL_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config_path = _get_config_path("email_config.json")
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
                     saved = json.load(f)
                     if 'receiver_email' in saved and 'receiver_emails' not in saved:
                         saved['receiver_emails'] = saved.pop('receiver_email')
@@ -672,8 +703,9 @@ class SystemConfigDialog(QDialog):
             'auth_password': '',  # v8.3新增
         }
         try:
-            if os.path.exists(self.PROXY_CONFIG_FILE):
-                with open(self.PROXY_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config_path = _get_config_path("proxy_config.json")
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
                     saved = json.load(f)
                     default.update(saved)
         except Exception:
@@ -681,10 +713,12 @@ class SystemConfigDialog(QDialog):
         return default
     
     def save_email_config(self):
-        """保存邮件配置"""
+        """保存邮件配置（始终写入用户配置目录）"""
         self._collect_email_config()
         try:
-            with open(self.EMAIL_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            os.makedirs(APP_CONFIG_DIR, exist_ok=True)
+            save_path = os.path.join(APP_CONFIG_DIR, "email_config.json")
+            with open(save_path, 'w', encoding='utf-8') as f:
                 json.dump(self.email_config, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
@@ -692,7 +726,7 @@ class SystemConfigDialog(QDialog):
             return False
     
     def save_proxy_config(self):
-        """保存代理配置"""
+        """保存代理配置（始终写入用户配置目录）"""
         try:
             config = {
                 'enabled': self.proxy_enabled_cb.isChecked(),
@@ -701,7 +735,9 @@ class SystemConfigDialog(QDialog):
                 'auth_username': self.auth_username_input.text().strip(),  # v8.3新增
                 'auth_password': self.auth_password_input.text().strip(),  # v8.3新增
             }
-            with open(self.PROXY_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            os.makedirs(APP_CONFIG_DIR, exist_ok=True)
+            save_path = os.path.join(APP_CONFIG_DIR, "proxy_config.json")
+            with open(save_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
             self.proxy_config = config
             return True

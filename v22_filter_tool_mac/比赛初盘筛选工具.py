@@ -1604,18 +1604,44 @@ class FilterToolMainWindow(QMainWindow):
         self.fetcher = OddsFetcher(proxy_config=self.proxy_config)
     
     def _load_proxy_config(self):
-        """v24新增: 加载代理配置文件"""
+        """v24新增: 加载代理配置文件（支持 macOS .app 打包）"""
+        import json
         try:
-            # 尝试从上级目录加载proxy_config.json
-            config_path = os.path.join(os.path.dirname(__file__), '..', 'proxy_config.json')
-            if os.path.exists(config_path):
-                import json
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    self.proxy_config = json.load(f)
-                self.add_log(f"✅ 已加载代理配置: {self.proxy_config.get('enabled', False)}")
+            # 1. 用户配置目录（可写）
+            if sys.platform == 'darwin':
+                user_dir = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "比赛初盘筛选工具")
             else:
-                self.proxy_config = {'enabled': False}
-                self.add_log("⚠️ 未找到代理配置文件，将不使用代理")
+                user_dir = os.path.dirname(os.path.abspath(__file__))
+            user_path = os.path.join(user_dir, "proxy_config.json")
+            
+            if os.path.exists(user_path):
+                with open(user_path, 'r', encoding='utf-8') as f:
+                    self.proxy_config = json.load(f)
+                self.add_log(f"✅ 已加载代理配置(用户目录)")
+                return
+            
+            # 2. .app 资源目录（打包内置，只读回退）
+            try:
+                bundle_path = os.path.join(sys._MEIPASS, "proxy_config.json")
+                if os.path.exists(bundle_path):
+                    with open(bundle_path, 'r', encoding='utf-8') as f:
+                        self.proxy_config = json.load(f)
+                    self.add_log(f"✅ 已加载代理配置(app资源)")
+                    return
+            except (AttributeError, ImportError):
+                pass
+            
+            # 3. 上级目录（开发模式）
+            parent_path = os.path.join(os.path.dirname(__file__), '..', 'proxy_config.json')
+            if os.path.exists(parent_path):
+                with open(parent_path, 'r', encoding='utf-8') as f:
+                    self.proxy_config = json.load(f)
+                self.add_log(f"✅ 已加载代理配置(上级目录)")
+                return
+            
+            # 4. 未找到
+            self.proxy_config = {'enabled': False}
+            self.add_log("⚠️ 未找到代理配置文件，将不使用代理")
         except Exception as e:
             self.proxy_config = {'enabled': False}
             self.add_log(f"❌ 加载代理配置失败: {e}")

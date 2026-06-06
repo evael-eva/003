@@ -17,6 +17,7 @@ a = Analysis(
     binaries=[],
     datas=[
         (os.path.join(SPEC_DIR, 'email_config.json'), '.'),
+        (os.path.join(SPEC_DIR, 'proxy_config.json'), '.'),
         (os.path.join(SPEC_DIR, 'monitor_profiles.json'), '.'),
     ],
     hiddenimports=[
