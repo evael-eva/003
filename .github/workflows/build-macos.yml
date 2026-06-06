@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ===== v21: 盘口监控邮件提醒 =====
+  # ===== v21_mac: 盘口监控邮件提醒 =====
   build-v21:
-    name: Build v21 - 盘口监控
+    name: Build v21_mac - 盘口监控
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
@@ -22,8 +22,8 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-v3-${{ hashFiles('requirements.txt') }}
-        restore-keys: ${{ runner.os }}-pip-v3-
+        key: ${{ runner.os }}-pip-v4-${{ hashFiles('requirements.txt') }}
+        restore-keys: ${{ runner.os }}-pip-v4-
 
     - name: Install dependencies
       run: |
@@ -32,32 +32,32 @@ jobs:
 
     - name: Build
       run: |
-        cd v21
+        cd v21_mac
         pyinstaller --clean --noconfirm 盘口监控邮件提醒.spec
 
     - name: Package
       run: |
-        if [ -d "v21/dist/盘口监控邮件提醒.app" ]; then
+        if [ -d "v21_mac/dist/盘口监控邮件提醒.app" ]; then
           hdiutil create -volname "盘口监控邮件提醒" \
-            -srcfolder "v21/dist/盘口监控邮件提醒.app" \
-            -ov -format UDZO "v21/dist/盘口监控邮件提醒.dmg"
-        elif [ -f "v21/dist/盘口监控邮件提醒/盘口监控邮件提醒" ]; then
-          cd v21/dist && zip -r 盘口监控邮件提醒-mac.zip 盘口监控邮件提醒
+            -srcfolder "v21_mac/dist/盘口监控邮件提醒.app" \
+            -ov -format UDZO "v21_mac/dist/盘口监控邮件提醒.dmg"
+        elif [ -f "v21_mac/dist/盘口监控邮件提醒/盘口监控邮件提醒" ]; then
+          cd v21_mac/dist && zip -r 盘口监控邮件提醒-mac.zip 盘口监控邮件提醒
         fi
 
     - uses: actions/upload-artifact@v4
       with:
-        name: v21-盘口监控邮件提醒
+        name: v21_mac-盘口监控邮件提醒
         path: |
-          v21/dist/盘口监控邮件提醒.app
-          v21/dist/盘口监控邮件提醒.dmg
-          v21/dist/盘口监控邮件提醒-mac.zip
+          v21_mac/dist/盘口监控邮件提醒.app
+          v21_mac/dist/盘口监控邮件提醒.dmg
+          v21_mac/dist/盘口监控邮件提醒-mac.zip
         retention-days: 30
         if-no-files-found: warn
 
-  # ===== v22: 比赛初盘筛选工具 =====
+  # ===== v22_filter_tool_mac: 比赛初盘筛选工具 =====
   build-v22:
-    name: Build v22 - 初盘筛选工具
+    name: Build v22_mac - 初盘筛选工具
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
@@ -67,8 +67,8 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-v3-${{ hashFiles('requirements.txt') }}
-        restore-keys: ${{ runner.os }}-pip-v3-
+        key: ${{ runner.os }}-pip-v4-${{ hashFiles('requirements.txt') }}
+        restore-keys: ${{ runner.os }}-pip-v4-
 
     - name: Install dependencies
       run: |
@@ -77,26 +77,26 @@ jobs:
 
     - name: Build
       run: |
-        cd v22_filter_tool
+        cd v22_filter_tool_mac
         pyinstaller --clean --noconfirm 比赛初盘筛选工具.spec
 
     - name: Package
       run: |
-        if [ -d "v22_filter_tool/dist/比赛初盘筛选工具.app" ]; then
+        if [ -d "v22_filter_tool_mac/dist/比赛初盘筛选工具.app" ]; then
           hdiutil create -volname "比赛初盘筛选工具" \
-            -srcfolder "v22_filter_tool/dist/比赛初盘筛选工具.app" \
-            -ov -format UDZO "v22_filter_tool/dist/比赛初盘筛选工具.dmg"
-        elif [ -f "v22_filter_tool/dist/比赛初盘筛选工具/比赛初盘筛选工具" ]; then
-          cd v22_filter_tool/dist && zip -r 比赛初盘筛选工具-mac.zip 比赛初盘筛选工具
+            -srcfolder "v22_filter_tool_mac/dist/比赛初盘筛选工具.app" \
+            -ov -format UDZO "v22_filter_tool_mac/dist/比赛初盘筛选工具.dmg"
+        elif [ -f "v22_filter_tool_mac/dist/比赛初盘筛选工具/比赛初盘筛选工具" ]; then
+          cd v22_filter_tool_mac/dist && zip -r 比赛初盘筛选工具-mac.zip 比赛初盘筛选工具
         fi
 
     - uses: actions/upload-artifact@v4
       with:
-        name: v22-比赛初盘筛选工具
+        name: v22_mac-比赛初盘筛选工具
         path: |
-          v22_filter_tool/dist/比赛初盘筛选工具.app
-          v22_filter_tool/dist/比赛初盘筛选工具.dmg
-          v22_filter_tool/dist/比赛初盘筛选工具-mac.zip
+          v22_filter_tool_mac/dist/比赛初盘筛选工具.app
+          v22_filter_tool_mac/dist/比赛初盘筛选工具.dmg
+          v22_filter_tool_mac/dist/比赛初盘筛选工具-mac.zip
         retention-days: 30
         if-no-files-found: warn
 
