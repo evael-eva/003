@@ -419,7 +419,7 @@ class FilterController(QObject):
             print(f"[FilterController] 点击确定失败: {e}")
         return False
 
-    def filter_by_asian(self, selected_values):
+    def filter_by_asian(self, selected_values, exclude_finished=False):
         matches = []
         try:
             self._click_goal_div_button()
@@ -428,12 +428,12 @@ class FilterController(QObject):
             checked_count = self._check_selected_handicaps(selected_values)
             print(f"[FilterController] 亚盘筛选: 已勾选 {checked_count} 个盘口")
             self._click_confirm()
-            matches = self._parse_match_list(source='亚盘')
+            matches = self._parse_match_list(source='亚盘', exclude_finished=exclude_finished)
         except Exception as e:
             print(f"[FilterController] 亚盘筛选异常: {e}")
         return matches
 
-    def filter_by_overunder(self, selected_values):
+    def filter_by_overunder(self, selected_values, exclude_finished=False):
         matches = []
         try:
             self._click_goal_div_button()
@@ -442,22 +442,23 @@ class FilterController(QObject):
             checked_count = self._check_selected_handicaps(selected_values)
             print(f"[FilterController] 大小球筛选: 已勾选 {checked_count} 个盘口")
             self._click_confirm()
-            matches = self._parse_match_list(source='大小球')
+            matches = self._parse_match_list(source='大小球', exclude_finished=exclude_finished)
         except Exception as e:
             print(f"[FilterController] 大小球筛选异常: {e}")
         return matches
     
-    def get_all_matches(self):
+    def get_all_matches(self, exclude_finished=False):
         matches = []
         try:
-            matches = self._parse_match_list(source='全部')
+            matches = self._parse_match_list(source='全部', exclude_finished=exclude_finished)
             self.log_signal.emit(f"[FilterController] 获取到 {len(matches)} 场比赛")
         except Exception as e:
             self.log_signal.emit(f"[FilterController] 获取所有比赛失败: {e}")
         return matches
 
     def filter_combined(self, asian_enabled, asian_values, ou_enabled, ou_values,
-                       half_ou_enabled=False, half_ou_min=0.75, half_ou_max=1.5):
+                       half_ou_enabled=False, half_ou_min=0.75, half_ou_max=1.5,
+                       skip_finished=False):
         all_matches = {}
         if half_ou_enabled and not asian_enabled and not ou_enabled:
             self.log_signal.emit("[FilterController] 检测到仅启用半场大小球筛选，获取所有比赛...")
@@ -487,7 +488,7 @@ class FilterController(QObject):
                 try:
                     ctrl_a = FilterController()
                     ctrl_a.open_live_page()
-                    asian_results = ctrl_a.filter_by_asian(asian_values)
+                    asian_results = ctrl_a.filter_by_asian(asian_values, exclude_finished=skip_finished)
                     ctrl_a.close_browser()
                 except Exception as e:
                     asian_error = str(e)
@@ -496,7 +497,7 @@ class FilterController(QObject):
                 try:
                     ctrl_o = FilterController()
                     ctrl_o.open_live_page()
-                    ou_results = ctrl_o.filter_by_overunder(ou_values)
+                    ou_results = ctrl_o.filter_by_overunder(ou_values, exclude_finished=skip_finished)
                     ctrl_o.close_browser()
                 except Exception as e:
                     ou_error = str(e)
@@ -535,7 +536,7 @@ class FilterController(QObject):
         else:
             self.open_live_page()
             if asian_enabled and asian_values:
-                asian_matches = self.filter_by_asian(asian_values)
+                asian_matches = self.filter_by_asian(asian_values, exclude_finished=skip_finished)
                 for m in asian_matches:
                     mid = m.get('match_id', '')
                     if mid and mid not in all_matches:
@@ -548,7 +549,7 @@ class FilterController(QObject):
                             sources.append('亚盘')
                         existing['sources'] = sources
             if ou_enabled and ou_values:
-                ou_matches = self.filter_by_overunder(ou_values)
+                ou_matches = self.filter_by_overunder(ou_values, exclude_finished=skip_finished)
                 for m in ou_matches:
                     mid = m.get('match_id', '')
                     if mid and mid not in all_matches:
@@ -1558,6 +1559,12 @@ class FilterToolMainWindow(QMainWindow):
         self.show_result_btn.setEnabled(False)  # 初始禁用
         stats_btn_layout.addWidget(self.show_result_btn)
         
+        # v25新增: 跳过完赛比赛复选框
+        self.skip_finished_cb = QCheckBox("跳过完赛比赛")
+        self.skip_finished_cb.setChecked(True)
+        self.skip_finished_cb.setToolTip("勾选后自动跳过状态为「完」的比赛")
+        stats_btn_layout.addWidget(self.skip_finished_cb)
+        
         result_layout.addLayout(stats_btn_layout)
         
         # v24修复: 简化主窗口的表格（仅显示基本信息）
@@ -1675,7 +1682,8 @@ class FilterToolMainWindow(QMainWindow):
         self.statusBar().showMessage("筛选中...")
         
         # 在后台线程执行筛选
-        self.worker = FilterWorkerThread(self.filter_ctrl, self.fetcher, configs)
+        skip_finished = self.skip_finished_cb.isChecked()
+        self.worker = FilterWorkerThread(self.filter_ctrl, self.fetcher, configs, skip_finished=skip_finished)
         self.worker.finished.connect(self.on_filter_finished)
         self.worker.progress.connect(self.add_log)
         self.worker.start()
@@ -2052,11 +2060,23 @@ class FilterToolMainWindow(QMainWindow):
         except Exception as e:
             self.add_log(f"❌ 加载方案失败：{type(e).__name__}: {e}")
             QMessageBox.critical(self, "错误", f"加载失败：{e}")
-    def __init__(self, filter_ctrl, fetcher, configs):
+
+
+# ============================================================
+# 筛选工作线程
+# ============================================================
+class FilterWorkerThread(QThread):
+    """后台筛选工作线程"""
+    
+    finished = pyqtSignal(bool, list, str)  # (success, matches, error_msg)
+    progress = pyqtSignal(str)
+    
+    def __init__(self, filter_ctrl, fetcher, configs, skip_finished=False):
         super().__init__()
         self.filter_ctrl = filter_ctrl
         self.fetcher = fetcher
         self.configs = configs
+        self.skip_finished = skip_finished
     
     def run(self):
         """执行筛选"""
@@ -2108,7 +2128,7 @@ class FilterToolMainWindow(QMainWindow):
             if need_get_all_matches and not need_browser_filter:
                 # 如果只启用了"不限"，没有指定具体盘口，直接获取所有比赛
                 self.progress.emit("步骤1: 获取所有比赛（不限盘口）...")
-                matches = self.filter_ctrl.get_all_matches()
+                matches = self.filter_ctrl.get_all_matches(exclude_finished=self.skip_finished)
             elif need_browser_filter:
                 # 如果有指定具体盘口，执行浏览器筛选
                 self.progress.emit("步骤1: 启动浏览器并进行盘口筛选...")
@@ -2116,11 +2136,12 @@ class FilterToolMainWindow(QMainWindow):
                     asian_enabled=asian_need_browser_filter,
                     asian_values=asian_values,
                     ou_enabled=ou_need_browser_filter,
-                    ou_values=ou_values
+                    ou_values=ou_values,
+                    skip_finished=self.skip_finished
                 )
             else:
                 # 理论上不会到这里，因为前面已经检查过至少启用一个筛选
-                matches = self.filter_ctrl.get_all_matches()
+                matches = self.filter_ctrl.get_all_matches(exclude_finished=self.skip_finished)
             
             if not matches:
                 self.finished.emit(False, [], "未找到任何比赛")
