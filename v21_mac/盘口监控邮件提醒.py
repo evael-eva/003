@@ -972,6 +972,28 @@ class MatchMonitorWidget(QWidget):
         g3_grid.setColumnStretch(4, 1)
         main_layout.addWidget(group3)
 
+        # === 分区4: 盘口到位提醒 ===
+        group4 = QGroupBox("盘口到位提醒")
+        g4_grid = QGridLayout(group4)
+        g4_grid.setSpacing(6)
+
+        # 亚盘盘口到位提醒（盘口到达设定值即触发）
+        self.target_asian_en, self.target_asian_val, self.target_asian_op = \
+            self._threshold_row(
+                "亚盘盘口到位(如半/一)",
+                0, g4_grid, default_val=0.75, step=0.25, decimals=2
+            )
+
+        # 大小球盘口到位提醒（盘口到达设定值即触发）
+        self.target_ou_en, self.target_ou_val, self.target_ou_op = \
+            self._threshold_row(
+                "大小球到位(如2.5到3.0)",
+                1, g4_grid, default_val=2.5, step=0.25, decimals=2
+            )
+
+        g4_grid.setColumnStretch(4, 1)
+        main_layout.addWidget(group4)
+
     def get_config(self):
         """获取当前控件的完整配置值（增强版）"""
         # 辅助方法：从比较符下拉框取值
@@ -1051,6 +1073,15 @@ class MatchMonitorWidget(QWidget):
             'handicap_change_ou_enabled': self.hc_ou_en.isChecked(),
             'handicap_change_ou_threshold': round(self.hc_ou_th.value(), 2),
             'handicap_change_ou_operator': _op(self.hc_ou_op),
+
+            # --- 盘口到位提醒 ---
+            'handicap_target_asian_enabled': self.target_asian_en.isChecked(),
+            'handicap_target_asian_value': round(self.target_asian_val.value(), 2),
+            'handicap_target_asian_operator': _op(self.target_asian_op),
+
+            'handicap_target_ou_enabled': self.target_ou_en.isChecked(),
+            'handicap_target_ou_value': round(self.target_ou_val.value(), 2),
+            'handicap_target_ou_operator': _op(self.target_ou_op),
         }
         return cfg
 
@@ -2879,6 +2910,16 @@ class MainWindow(QMainWindow):
                 # v2优化: 盘口变化比较符设置
                 self._set_combo_value(widget.hc_asian_op, profile_config.get('handicap_change_asian_operator', '>'))
                 self._set_combo_value(widget.hc_ou_op, profile_config.get('handicap_change_ou_operator', '>'))
+                
+                # 盘口到位提醒
+                widget.target_asian_en.setChecked(profile_config.get('handicap_target_asian_enabled', False))
+                widget.target_asian_val.setValue(profile_config.get('handicap_target_asian_value', 0.75))
+                
+                widget.target_ou_en.setChecked(profile_config.get('handicap_target_ou_enabled', False))
+                widget.target_ou_val.setValue(profile_config.get('handicap_target_ou_value', 2.5))
+                
+                self._set_combo_value(widget.target_asian_op, profile_config.get('handicap_target_asian_operator', '>'))
+                self._set_combo_value(widget.target_ou_op, profile_config.get('handicap_target_ou_operator', '>'))
                 
                 success_count += 1
                 

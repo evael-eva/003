@@ -446,6 +446,8 @@ class AlertService(QObject):
             'ou_under_odds': '下跌收益率达标',
             'handicap_change_asian': '技术指标变动',
             'handicap_change_ou': '波动率变动',
+            'handicap_target_asian': '技术指标到位',
+            'handicap_target_ou': '波动率到位',
             'engine_crash': '系统异常',  # v5新增
             'match_ended': '比赛结束',  # v5新增
         }
@@ -467,6 +469,8 @@ class AlertService(QObject):
             'ou_under_odds': '小球水位达标',
             'handicap_change_asian': '亚盘变化',
             'handicap_change_ou': '大小球变化',
+            'handicap_target_asian': '亚盘到位',
+            'handicap_target_ou': '大小球到位',
             'engine_crash': '监控引擎崩溃',  # v5新增
             'match_ended': '比赛结束',  # v5新增
         }

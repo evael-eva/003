@@ -1707,6 +1707,32 @@ class MonitorEngine(QThread):
                                           f"{direction} 变化{abs(change)}(阈值{op_txt}{ouc_th}), "
                                           f"当前={gl_str}(数值{gl_val})")
 
+            # === 规则5.1: 亚盘盘口到位提醒（盘口到达设定值即触发）===
+            if config.get('handicap_target_asian_enabled', False) and asian_latest:
+                h_str = asian_latest.get('handicap', '')
+                h_val = self._parse_handicap_value(h_str)
+                if h_val is not None:
+                    target_val = config.get('handicap_target_asian_value', 0.75)
+                    target_op = config.get('handicap_target_asian_operator', '>')
+                    if self._check_threshold(h_val, target_val, target_op):
+                        op_txt = {'<': '≤', '>': '≥', '=': '='}.get(target_op, '≥')
+                        self._try_trigger(match_id, 'asian_handicap_target',
+                                          f"亚盘盘口到位! {config.get('home_team','')} vs {config.get('away_team','')}: "
+                                          f"当前盘口={h_str}(数值{h_val}) {op_txt} 目标{target_val}")
+
+            # === 规则5.2: 大小球盘口到位提醒（盘口到达设定值即触发）===
+            if config.get('handicap_target_ou_enabled', False) and ou_latest:
+                gl_str = ou_latest.get('goal_line', '')
+                gl_val = self._parse_goal_line_value(gl_str)
+                if gl_val is not None:
+                    target_val = config.get('handicap_target_ou_value', 2.5)
+                    target_op = config.get('handicap_target_ou_operator', '>')
+                    if self._check_threshold(gl_val, target_val, target_op):
+                        op_txt = {'<': '≤', '>': '≥', '=': '='}.get(target_op, '≥')
+                        self._try_trigger(match_id, 'ou_handicap_target',
+                                          f"大小球盘口到位! {config.get('home_team','')} vs {config.get('away_team','')}: "
+                                          f"当前盘口={gl_str}(数值{gl_val}) {op_txt} 目标{target_val}")
+
             # === 规则6: 70分钟进球提醒 ===
             if config.get('minute_70_goal_enabled', False) and current_minute > 0:
                 threshold_minute = config.get('minute_70_threshold', 70)
