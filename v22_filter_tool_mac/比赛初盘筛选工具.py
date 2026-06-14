@@ -165,10 +165,27 @@ GLOBAL_STYLESHEET = """
 # ============================================================
 # 嵌入的 FilterController 类（来自 v21/filter_controller.py）
 # ============================================================
-class FilterController(QObject):
-    """盘口筛选控制器"""
+class FilterController:
+    """盘口筛选控制器（非QObject，避免跨线程信号阻塞主UI）"""
     
-    log_signal = pyqtSignal(str)
+    def __init__(self):
+        self.web_page = None
+        self._running = False
+        self._log_callback = None  # 可选的外部日志回调
+    
+    def set_log_callback(self, callback):
+        """设置日志回调函数，用于在工作线程中安全地输出日志"""
+        self._log_callback = callback
+    
+    def _emit_log(self, msg):
+        """通过回调输出日志，如果无回调则print"""
+        if self._log_callback:
+            try:
+                self._log_callback(msg)
+            except:
+                print(msg)
+        else:
+            print(msg)
 
     ASIAN_HANDICAP_OPTIONS = {
         '-0.25': '平/半', '-0.5': '半球', '-0.75': '半/一', '-1': '一球',
@@ -188,10 +205,7 @@ class FilterController(QObject):
         '4.75': '4.5/5', '5.25': '5/5.5', '6': '6',
     }
 
-    def __init__(self):
-        super().__init__()
-        self.web_page = None
-        self._running = False
+    # __init__ 已在类定义中，此处删除重复
 
     @staticmethod
     def get_chrome_path():
@@ -292,7 +306,7 @@ class FilterController(QObject):
         if not self.web_page:
             self.create_browser(headless=True)
         url = "https://live.titan007.com/indexall.aspx"
-        self.web_page.get(url)
+        self.web_page.get(url, timeout=30)
         self._random_delay(2, 3)
         try:
             erheyi_btn = self.web_page.ele('xpath://*[@id="tools"]/ul/li[1]', timeout=5)
@@ -451,9 +465,9 @@ class FilterController(QObject):
         matches = []
         try:
             matches = self._parse_match_list(source='全部', exclude_finished=exclude_finished)
-            self.log_signal.emit(f"[FilterController] 获取到 {len(matches)} 场比赛")
+            self._emit_log(f"[FilterController] 获取到 {len(matches)} 场比赛")
         except Exception as e:
-            self.log_signal.emit(f"[FilterController] 获取所有比赛失败: {e}")
+            self._emit_log(f"[FilterController] 获取所有比赛失败: {e}")
         return matches
 
     def filter_combined(self, asian_enabled, asian_values, ou_enabled, ou_values,
@@ -461,10 +475,10 @@ class FilterController(QObject):
                        skip_finished=False):
         all_matches = {}
         if half_ou_enabled and not asian_enabled and not ou_enabled:
-            self.log_signal.emit("[FilterController] 检测到仅启用半场大小球筛选，获取所有比赛...")
+            self._emit_log("[FilterController] 检测到仅启用半场大小球筛选，获取所有比赛...")
             self.open_live_page()
             all_matches_list = self._parse_match_list(source='全部', exclude_finished=True)
-            self.log_signal.emit(f"[FilterController] 获取到 {len(all_matches_list)} 场未结束比赛")
+            self._emit_log(f"[FilterController] 获取到 {len(all_matches_list)} 场未结束比赛")
             for m in all_matches_list:
                 mid = m.get('match_id', '')
                 if mid and mid not in all_matches:
@@ -505,8 +519,8 @@ class FilterController(QObject):
             t2 = threading.Thread(target=_run_ou)
             t1.start()
             t2.start()
-            t1.join(timeout=120)
-            t2.join(timeout=120)
+            t1.join(timeout=45)  # v22修复: 减少超时避免长时间阻塞
+            t2.join(timeout=45)
             if asian_error:
                 print(f"[FilterController] 亚盘线程异常: {asian_error}")
             if ou_error:
@@ -562,7 +576,7 @@ class FilterController(QObject):
                             sources.append('大小球')
                         existing['sources'] = sources
             if not asian_enabled and not ou_enabled and half_ou_enabled:
-                self.log_signal.emit("[FilterController] 仅启用半场大球初盘筛选，获取所有比赛...")
+                self._emit_log("[FilterController] 仅启用半场大球初盘筛选，获取所有比赛...")
                 all_matches_list = self.get_all_matches()
                 for m in all_matches_list:
                     mid = m.get('match_id', '')
@@ -780,7 +794,7 @@ class OddsFetcher:
             else:
                 import re as re_module
                 api_url = re_module.sub(r'num=\d+', f'num={num}', api_url)
-            response = requests.get(api_url, timeout=10)
+            response = requests.get(api_url, timeout=8)  # v22修复: 8秒超时避免长时间卡住
             if response.status_code != 200:
                 return []
             text = response.text.strip()
@@ -2123,6 +2137,8 @@ class FilterWorkerThread(QThread):
             
             need_browser_filter = asian_need_browser_filter or ou_need_browser_filter
             
+            # v22修复: 设置日志回调，通过线程的progress信号安全输出日志
+            self.filter_ctrl.set_log_callback(lambda msg: self.progress.emit(msg))
             self.filter_ctrl.open_live_page()
             
             if need_get_all_matches and not need_browser_filter:
