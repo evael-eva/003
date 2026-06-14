@@ -752,7 +752,7 @@ class OddsFetcher:
         self.proxy_start_time = None
         self.PROXY_ROTATE_INTERVAL = 600
         self._request_count = 0
-        self._proxy_lock = threading.Lock()
+        self._proxy_lock = threading.RLock()  # v22修复: 可重入锁，避免_mark_proxy_failed调用_fetch_new_proxy时死锁
         self._last_fetch_time = 0
         self._fetch_cooldown = 2
         
@@ -900,6 +900,7 @@ class OddsFetcher:
         if '@' in proxy_addr:
             proxy_addr = proxy_addr.split('@')[1]
         
+        need_rotate = False
         with self._proxy_lock:
             # v24新增: 加入失效黑名单
             self.failed_proxies.add(proxy_addr)
@@ -911,10 +912,14 @@ class OddsFetcher:
             if self.failed_proxy_count >= self.max_failed_before_rotate:
                 print(f"[代理管理] ⚠️ 连续失败{self.failed_proxy_count}次，强制轮换代理")
                 self.failed_proxy_count = 0  # 重置计数器
-                self._fetch_new_proxy(force=True)  # 强制获取新代理
+                need_rotate = True
             # v24优化: 否则不立即更换，继续使用当前代理（其他线程可能成功）
             else:
                 print(f"[代理管理] ℹ️ 失败次数未达阈值({self.max_failed_before_rotate})，暂不轮换")
+        
+        # v22修复: 释放锁后再执行网络请求，避免阻塞其他线程
+        if need_rotate:
+            self._fetch_new_proxy(force=True)  # 强制获取新代理
 
     def fetch_initial_odds(self, match_id):
         result = {'asian_initial': None, 'ou_initial': None, 'asian_rows': [], 'ou_rows': [], 'error': None}
