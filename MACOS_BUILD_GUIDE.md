@@ -11,6 +11,8 @@ git config --global https.proxy http://127.0.0.1:10809
 git remote add origin https://ghproxy.com/https://github.com/evael-eva/001.git
 1. **代码已推送到 GitHub 仓库**
    ```bash
+git config --global http.sslVerify false
+
    git remote remove origin
    git init
    git add .
