@@ -2369,7 +2369,10 @@ class MainWindow(QMainWindow):
         self.monitor_engine.clear_matches()
         for row_idx, widget in self.match_widgets.items():
             config = widget.get_config()
-            self.monitor_engine.add_match(config['match_id'], config)
+            # v22新增: 传入初盘数据（含半场初盘），供邮件模板使用
+            match_id = config['match_id']
+            initial_odds = self.initial_odds_cache.get(match_id, None)
+            self.monitor_engine.add_match(match_id, config, initial_odds=initial_odds)
 
         # 启动监控引擎线程
         self.monitor_engine.start()
@@ -2417,16 +2420,17 @@ class MainWindow(QMainWindow):
 
         self.add_log("⏹ 监控已停止")
 
-    def on_alert_triggered(self, match_id, alert_type, message):
+    def on_alert_triggered(self, match_id, alert_type, message, context=None):
         """
         处理监控引擎发出的告警信号
         :param match_id: 比赛ID
         :param alert_type: 告警类型
         :param message: 告警消息（已包含联赛名等信息）
+        :param context: v22新增: 富告警上下文字典（含盘口数据等）
         """
         try:
             # 调用alert_service发送告警（弹窗/声音/邮件）
-            self.alert_svc.trigger_alert(match_id, alert_type, message)
+            self.alert_svc.trigger_alert(match_id, alert_type, message, context=context)
         except Exception as e:
             self.add_log(f"[告警处理] 失败: {e}")
 
@@ -2649,10 +2653,10 @@ class MainWindow(QMainWindow):
                             self.match_table.setItem(row, 4, mi)
                     break
 
-    def on_alert_triggered(self, match_id, alert_type, message):
-        """告警触发回调"""
+    def on_alert_triggered(self, match_id, alert_type, message, context=None):
+        """告警触发回调（v22增强: 支持富告警上下文）"""
         # 转发给AlertService
-        self.alert_svc.trigger_alert(match_id, alert_type, message)
+        self.alert_svc.trigger_alert(match_id, alert_type, message, context=context)
         self.alert_count_label.setText(f"告警: {self.alert_svc.total_alerts} 次")
 
     def on_monitor_status_changed(self, running, count):

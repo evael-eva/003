@@ -25,8 +25,9 @@ class MonitorEngine(QThread):
     # ===== 信号定义 =====
     # 数据更新信号：传递比赛ID和最新数据
     data_updated = pyqtSignal(str, dict)
-    # 告警触发信号：(match_id, alert_type, detail_msg)
-    alert_triggered = pyqtSignal(str, str, str)
+    # 告警触发信号：(match_id, alert_type, detail_msg, context_dict)
+    # v22新增: context_dict 包含联赛/队名/比分/盘口等结构化数据，供邮件模板使用
+    alert_triggered = pyqtSignal(str, str, str, dict)
     # 日志信号
     log_signal = pyqtSignal(str)
     # 监控状态变化信号：(running:bool, match_count:int)
@@ -78,6 +79,10 @@ class MonitorEngine(QThread):
 
         # 最新数据缓存: {match_id: latest_data}
         self.latest_data_cache = {}
+
+        # v22新增: 初盘数据缓存: {match_id: {'asian_initial': ..., 'ou_initial': ..., 'asian_half_initial': ..., 'ou_half_initial': ...}}
+        # 由主程序通过 add_match 传入，供邮件模板使用
+        self.initial_odds_map = {}
         
         # 70分钟进球提醒状态跟踪: {match_id: {'goals_before_threshold': int, 'alerted': bool}}
         # 记录在到达设定时间前的进球数，用于判断是否有进球
@@ -132,12 +137,16 @@ class MonitorEngine(QThread):
         from PyQt5.QtCore import QTimer
         self.countdown_timers = {}
 
-    def add_match(self, match_id, config):
+    def add_match(self, match_id, config, initial_odds=None):
         """
         添加要监控的比赛
         :param match_id: 比赛ID
         :param config: 监控配置字典，可包含 'match_time' 和 'status' 字段
+        :param initial_odds: 初盘数据字典（可选），包含 asian_initial/ou_initial/asian_half_initial/ou_half_initial
         """
+        # v22新增: 存储初盘数据
+        if initial_odds:
+            self.initial_odds_map[match_id] = initial_odds
         # v5新增: 检查是否为未开赛比赛
         match_status = config.get('status', '')
         match_time = config.get('match_time', '')
@@ -225,6 +234,7 @@ class MonitorEngine(QThread):
         """清空所有监控比赛"""
         self.monitored_matches.clear()
         self.latest_data_cache.clear()
+        self.initial_odds_map.clear()  # v22新增: 同时清空初盘缓存
         self.alert_cooldown.clear()
         self._one_shot_triggered.clear()  # 同时清空单次告警记录
         self.minute_goal_states.clear()  # 清空70分钟进球提醒状态
@@ -2123,7 +2133,9 @@ class MonitorEngine(QThread):
         return None
 
     def _try_trigger(self, match_id, alert_type, message):
-        """尝试触发告警（带冷却机制 + 可选单次模式）"""
+        """尝试触发告警（带冷却机制 + 可选单次模式）
+        v22增强: 构建完整 context 字典供邮件模板使用
+        """
         key = (match_id, alert_type)
         now = datetime.now()
 
@@ -2144,18 +2156,97 @@ class MonitorEngine(QThread):
         if self.one_shot_alert:
             self._one_shot_triggered.add(key)
 
-        # v5优化: 从config中提取联赛信息，添加到消息中
+        # ========== v22新增: 构建富告警上下文 ==========
         config = self.monitored_matches.get(match_id, {})
+        latest = self.latest_data_cache.get(match_id, {})
+        initial_odds = self.initial_odds_map.get(match_id, {})
+
+        # 从最新数据中提取比分和分钟数
+        current_score = ''
+        half_time_score = latest.get('half_time_score', '') or ''
+        current_minute = 0
+        total_goals = 0
+
+        ou_latest = latest.get('ou_latest')
+        if ou_latest:
+            current_score = ou_latest.get('score', '')
+            current_minute = self._parse_minute(ou_latest.get('time', ''))
+            total_goals = self._parse_total_goals(current_score)
+
+        context = {
+            # --- 基础信息 ---
+            'match_id': match_id,
+            'league': config.get('league', ''),
+            'home_team': config.get('home_team', ''),
+            'away_team': config.get('away_team', ''),
+            'match_time': config.get('match_time', ''),
+
+            # --- 事件信息 ---
+            'alert_type': alert_type,
+            'current_score': current_score,
+            'half_time_score': half_time_score,
+            'current_minute': current_minute,
+            'total_goals': total_goals,
+
+            # --- 盘口信息 ---
+            'asian_initial': initial_odds.get('asian_initial'),
+            'ou_initial': initial_odds.get('ou_initial'),
+            'asian_half_initial': initial_odds.get('asian_half_initial'),
+            'ou_half_initial': initial_odds.get('ou_half_initial'),
+            'asian_latest': latest.get('asian_latest'),
+            'ou_latest': ou_latest,
+            'half_ou_latest': latest.get('half_ou_latest'),
+
+            # --- 规则参数快照 ---
+            'config_snapshot': self._build_config_snapshot(config, alert_type),
+        }
+
+        # v5优化: 从config中提取联赛信息，添加到消息中
         league = config.get('league', '')
         if league:
-            # 在消息开头添加联赛信息
             enhanced_message = f"【{league}】{message}"
         else:
             enhanced_message = message
-        
-        self.alert_triggered.emit(match_id, alert_type, enhanced_message)
+
+        self.alert_triggered.emit(match_id, alert_type, enhanced_message, context)
         timestamp = now.strftime('%H:%M:%S')
         self.log_signal.emit(f"[⚠️告警] [{timestamp}] {message}")
+
+    @staticmethod
+    def _build_config_snapshot(config, alert_type):
+        """
+        v22新增: 构建触发时规则参数快照（供邮件模板使用）
+        :param config: 比赛配置字典
+        :param alert_type: 告警类型
+        :return: 参数字典
+        """
+        snapshot = {}
+        # 提取与当前告警类型相关的配置参数
+        if 'goal' in alert_type or 'no_goal' in alert_type:
+            snapshot['target_goals'] = config.get('target_goals', 0)
+            snapshot['first_half_goal_threshold'] = config.get('first_half_goal_threshold', 1)
+            snapshot['second_half_goal_threshold'] = config.get('second_half_goal_threshold', 1)
+        if 'asian' in alert_type or 'home' in alert_type:
+            snapshot['asian_home_threshold'] = config.get('asian_home_threshold', 0)
+            snapshot['asian_home_operator'] = config.get('asian_home_operator', '<')
+        if 'asian' in alert_type or 'away' in alert_type:
+            snapshot['asian_away_threshold'] = config.get('asian_away_threshold', 0)
+            snapshot['asian_away_operator'] = config.get('asian_away_operator', '<')
+        if 'ou' in alert_type or 'over' in alert_type:
+            snapshot['ou_over_threshold'] = config.get('ou_over_threshold', 0)
+            snapshot['ou_over_operator'] = config.get('ou_over_operator', '<')
+        if 'ou' in alert_type or 'under' in alert_type:
+            snapshot['ou_under_threshold'] = config.get('ou_under_threshold', 0)
+            snapshot['ou_under_operator'] = config.get('ou_under_operator', '<')
+        if 'handicap_change' in alert_type:
+            snapshot['handicap_change_asian_threshold'] = config.get('handicap_change_asian_threshold', 0.25)
+            snapshot['handicap_change_ou_threshold'] = config.get('handicap_change_ou_threshold', 0.25)
+        if 'minute' in alert_type or 'no_goal' in alert_type:
+            snapshot['first_half_no_goal_minute'] = config.get('first_half_no_goal_minute', 30)
+            snapshot['first_half_no_goal_threshold'] = config.get('first_half_no_goal_threshold', 1)
+            snapshot['second_half_no_goal_minute'] = config.get('second_half_no_goal_minute', 70)
+            snapshot['second_half_no_goal_threshold'] = config.get('second_half_no_goal_threshold', 1)
+        return snapshot
 
     @staticmethod
     def _safe_float(value_str):

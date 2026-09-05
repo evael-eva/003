@@ -14,6 +14,7 @@
 import os
 import json
 import threading
+import uuid
 from datetime import datetime
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
@@ -51,6 +52,13 @@ class AlertService(QObject):
 
         # 告警计数器
         self.total_alerts = 0
+
+        # v22新增: 告警唯一ID计数器（递增序号，程序重启后从1开始）
+        self._alert_id_counter = 0
+        # v22新增: 已发送的告警ID集合（用于重发检测）
+        self._sent_alert_ids = set()
+        # v22新增: 是否为重启后的重发（软件重启后首次发送的历史告警标记为重发）
+        self._is_resend_mode = False
 
         # 将信号连接到实际的弹窗显示方法（在主线程中执行）
         self._popup_requested.connect(self._show_popup_on_main_thread)
@@ -135,17 +143,17 @@ class AlertService(QObject):
         # 不再自动设置 self.email_enabled = True
         # 邮件开关完全由 UI 的 email_cb 复选框控制
 
-    def trigger_alert(self, match_id, alert_type, message):
+    def trigger_alert(self, match_id, alert_type, message, context=None):
         """
         统一触发告警 - 根据开关状态分别调用各通知方式
         :param match_id: 比赛ID
-        :param alert_type: 告警类型 (goal_reached / first_half_goal / second_half_goal /
-                         asian_home_odds / asian_away_odds / ou_over_odds / ou_under_odds)
+        :param alert_type: 告警类型
         :param message: 告警详情信息
+        :param context: v22新增: 富告警上下文字典（含盘口数据/比分/分钟数等），系统告警可不传
         """
         self.total_alerts += 1
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
+
         # v2新增: 保存告警日志
         self._save_alert_log(match_id, alert_type, message, timestamp)
 
@@ -153,7 +161,6 @@ class AlertService(QObject):
         threads = []
 
         if self.popup_enabled:
-            # 通过信号将弹窗请求安全地投递到主线程（跨线程信号自动QueuedConnection）
             self._popup_requested.emit(message, alert_type, timestamp)
 
         if self.sound_enabled:
@@ -161,23 +168,287 @@ class AlertService(QObject):
             threads.append(t)
 
         if self.email_enabled and self.email_config.get('receiver_emails'):
-            # v2优化: 伪装成美股股票信息，替换敏感词
-            original_subject = f"[盘口监控] {self._get_alert_type_name(alert_type)} - {timestamp}"
-            original_body = f"比赛ID: {match_id}\n告警类型: {self._get_alert_type_name(alert_type)}\n时间: {timestamp}\n\n{message}\n\n---\n此邮件由盘口监控系统自动发送"
-            
-            # 替换敏感词
-            sanitized_subject = self._sanitize_email_content(original_subject)
-            sanitized_body = self._sanitize_email_content(original_body)
-            
-            # 使用伪装后的标题和内容
-            subject = f"[美股股票信息] {sanitized_subject}"
-            body = sanitized_body
-            
+            # v22重构: 使用结构化模板生成邮件（不再做敏感词替换，供AI直接解析）
+            if context:
+                subject = self._build_email_subject(context)
+                body = self._build_email_body(context, message, timestamp)
+            else:
+                # 系统告警（无context），使用简洁格式
+                subject = f"【警报|{self._get_alert_type_full_name(alert_type)}|系统通知】"
+                body = f"时间: {timestamp}\n告警类型: {self._get_alert_type_full_name(alert_type)}\n详情: {message}\n警报ID: {self._next_alert_id()}\n重发: {'是' if self._is_resend_mode else '否'}"
+
             t = threading.Thread(target=self._send_email, args=(subject, body,), daemon=True)
             threads.append(t)
 
         for t in threads:
             t.start()
+
+    # ==================== v22新增: 邮件模板构建方法 ====================
+
+    def _next_alert_id(self):
+        """生成递增的告警唯一ID"""
+        self._alert_id_counter += 1
+        return f"ALT-{datetime.now().strftime('%Y%m%d')}-{self._alert_id_counter:04d}"
+
+    def _build_email_subject(self, context):
+        """
+        按需求格式构建邮件主题：
+        【警报|规则中文名|联赛|主队vs客队|第X分钟|半场比分|全场比分】
+        """
+        rule_name = self._get_alert_type_full_name(context.get('alert_type', ''))
+        league = context.get('league', '')
+        home = context.get('home_team', '')
+        away = context.get('away_team', '')
+        minute = context.get('current_minute', 0)
+        half_score = context.get('half_time_score', '') or '-'
+        full_score = context.get('current_score', '') or '-'
+
+        parts = ['警报', rule_name]
+        if league:
+            parts.append(league)
+        if home and away:
+            parts.append(f"{home}vs{away}")
+        parts.append(f"第{minute}分钟")
+        parts.append(f"半场{half_score}")
+        parts.append(f"全场{full_score}")
+
+        return '【' + '|'.join(parts) + '】'
+
+    def _build_email_body(self, context, message, timestamp):
+        """
+        按需求格式构建邮件正文（键值对，一行一个，方便程序解析）
+        """
+        alert_id = self._next_alert_id()
+        self._sent_alert_ids.add(alert_id)
+        rule_name = self._get_alert_type_full_name(context.get('alert_type', ''))
+
+        lines = []
+
+        # ========== A. 基础信息 ==========
+        lines.append(f"时间: {timestamp}")
+        lines.append(f"比赛ID: {context.get('match_id', '')}")
+        lines.append(f"联赛: {context.get('league', '')}")
+        lines.append(f"主队: {context.get('home_team', '')}")
+        lines.append(f"客队: {context.get('away_team', '')}")
+        lines.append(f"开球时间: {context.get('match_time', '')}")
+
+        # ========== B. 事件信息 ==========
+        lines.append(f"规则: {rule_name}")
+        lines.append(f"分钟: {context.get('current_minute', 0)}")
+        # 触发阈值（从规则快照中提取）
+        snapshot = context.get('config_snapshot', {})
+        threshold_desc = self._format_threshold_description(context.get('alert_type', ''), snapshot)
+        if threshold_desc:
+            lines.append(f"触发阈值: {threshold_desc}")
+        lines.append(f"半场比分: {context.get('half_time_score', '') or '-'}")
+        lines.append(f"全场比分: {context.get('current_score', '') or '-'}")
+        # 最近进球（从message中解析）
+        last_goal = self._extract_last_goal_info(message, context)
+        if last_goal:
+            lines.append(f"最近进球: {last_goal}")
+
+        # ========== C. 盘口信息 ==========
+        # 全场亚让初盘
+        ai = context.get('asian_initial')
+        if ai:
+            lines.append(f"全场亚让初盘: {ai.get('home_odds', '-')} {ai.get('handicap', '-')} {ai.get('away_odds', '-')}")
+        else:
+            lines.append("全场亚让初盘: -")
+
+        # 全场大小初盘
+        oi = context.get('ou_initial')
+        if oi:
+            lines.append(f"全场大小初盘: {oi.get('over_odds', '-')} {oi.get('goal_line', '-')} {oi.get('under_odds', '-')}")
+        else:
+            lines.append("全场大小初盘: -")
+
+        # 半场大小初盘
+        ohi = context.get('ou_half_initial')
+        if ohi:
+            lines.append(f"半场大小初盘: {ohi.get('over_odds', '-')} {ohi.get('goal_line', '-')} {ohi.get('under_odds', '-')}")
+        else:
+            lines.append("半场大小初盘: -")
+
+        # 半场亚让初盘
+        ahi = context.get('asian_half_initial')
+        if ahi:
+            lines.append(f"半场亚让初盘: {ahi.get('home_odds', '-')} {ahi.get('handicap', '-')} {ahi.get('away_odds', '-')}")
+        else:
+            lines.append("半场亚让初盘: -")
+
+        # 当前滚球半场大小盘
+        half_ou = context.get('half_ou_latest')
+        if half_ou:
+            gl = half_ou.get('goal_line', '-')
+            over = half_ou.get('over_odds', '-')
+            under = half_ou.get('under_odds', '-')
+            lines.append(f"滚球半场大小: {gl} 大{over} 小{under}")
+        else:
+            lines.append("滚球半场大小: -")
+
+        # 当前滚球全场大小盘
+        ou_l = context.get('ou_latest')
+        if ou_l:
+            gl = ou_l.get('goal_line', '-')
+            over = ou_l.get('over_odds', '-')
+            under = ou_l.get('under_odds', '-')
+            lines.append(f"滚球全场大小: {gl} 大{over} 小{under}")
+        else:
+            lines.append("滚球全场大小: -")
+
+        # 当前滚球亚盘
+        asian_l = context.get('asian_latest')
+        if asian_l:
+            h = asian_l.get('handicap', '-')
+            home_o = asian_l.get('home_odds', '-')
+            away_o = asian_l.get('away_odds', '-')
+            lines.append(f"滚球全场亚让: {home_o} {h} {away_o}")
+        else:
+            lines.append("滚球全场亚让: -")
+
+        # 触发时水位（从message中解析，用于水位类告警）
+        trigger_odds = self._extract_trigger_odds(message, context.get('alert_type', ''))
+        if trigger_odds:
+            lines.append(f"触发时水位: {trigger_odds}")
+
+        # ========== D. 系统与去重 ==========
+        lines.append(f"警报ID: {alert_id}")
+        lines.append(f"重发: {'是' if self._is_resend_mode else '否'}")
+
+        # 规则参数快照
+        if snapshot:
+            snapshot_str = ' / '.join(f"{k}={v}" for k, v in snapshot.items() if v)
+            lines.append(f"规则参数: {snapshot_str}")
+
+        # 原始告警消息（供参考）
+        lines.append(f"原始消息: {message}")
+
+        return '\n'.join(lines)
+
+    @staticmethod
+    def _format_threshold_description(alert_type, snapshot):
+        """格式化触发阈值描述"""
+        if not snapshot:
+            return ''
+        # 根据告警类型选择最相关的阈值
+        if 'first_half_goal' in alert_type:
+            th = snapshot.get('first_half_goal_threshold', '')
+            return f"上半场{th}球(阈值{th})" if th else ''
+        if 'second_half_goal' in alert_type:
+            th = snapshot.get('second_half_goal_threshold', '')
+            return f"下半场{th}球(阈值{th})" if th else ''
+        if 'goal_reached' in alert_type:
+            th = snapshot.get('target_goals', '')
+            return f"全场{th}球(目标{th})" if th else ''
+        if 'no_goal' in alert_type:
+            th = snapshot.get('first_half_no_goal_threshold', snapshot.get('second_half_no_goal_threshold', ''))
+            minute = snapshot.get('first_half_no_goal_minute', snapshot.get('second_half_no_goal_minute', ''))
+            return f"{minute}分钟仅{th}球" if th and minute else ''
+        if 'asian_home' in alert_type:
+            th = snapshot.get('asian_home_threshold', '')
+            op = snapshot.get('asian_home_operator', '<')
+            op_txt = {'<': '低于', '>': '高于', '=': '等于'}.get(op, op)
+            return f"主队水位{op_txt}{th}" if th else ''
+        if 'asian_away' in alert_type:
+            th = snapshot.get('asian_away_threshold', '')
+            op = snapshot.get('asian_away_operator', '<')
+            op_txt = {'<': '低于', '>': '高于', '=': '等于'}.get(op, op)
+            return f"客队水位{op_txt}{th}" if th else ''
+        if 'ou_over' in alert_type:
+            th = snapshot.get('ou_over_threshold', '')
+            op = snapshot.get('ou_over_operator', '<')
+            op_txt = {'<': '低于', '>': '高于', '=': '等于'}.get(op, op)
+            return f"大球水位{op_txt}{th}" if th else ''
+        if 'ou_under' in alert_type:
+            th = snapshot.get('ou_under_threshold', '')
+            op = snapshot.get('ou_under_operator', '<')
+            op_txt = {'<': '低于', '>': '高于', '=': '等于'}.get(op, op)
+            return f"小球水位{op_txt}{th}" if th else ''
+        return ''
+
+    @staticmethod
+    def _extract_last_goal_info(message, context):
+        """从告警消息中提取最近进球信息"""
+        # 尝试从 message 中解析进球方和分钟数
+        # 格式如: "上半场1球(阈值1), 全场1球, 比分 0-1, 第43分钟"
+        import re
+        home = context.get('home_team', '')
+        away = context.get('away_team', '')
+        minute = context.get('current_minute', 0)
+        total = context.get('total_goals', 0)
+
+        # 如果是进球类告警，推断最近进球方
+        if 'goal' in context.get('alert_type', ''):
+            score = context.get('current_score', '')
+            if score and '-' in score:
+                parts = score.split('-')
+                try:
+                    h_goals = int(parts[0].strip())
+                    a_goals = int(parts[1].strip())
+                    # 简单推断：如果总进球数为奇数且主队多，则主队进；偶数则看上次
+                    # 实际上无法精确判断，标注为"第N球"
+                    return f"第{total}球 第{minute}分钟"
+                except (ValueError, IndexError):
+                    pass
+            return f"第{total}球 第{minute}分钟" if total > 0 else ''
+        return ''
+
+    @staticmethod
+    def _extract_trigger_odds(message, alert_type):
+        """从告警消息中提取触发时的水位值"""
+        import re
+        # 匹配 "赔率=X.XX" 或 "水位=X.XX" 格式
+        m = re.search(r'赔率[=＝]([\d.]+)', message)
+        if m:
+            odds_val = m.group(1)
+            # 判断是主队/客队/大球/小球
+            if '主队' in message or 'home' in alert_type:
+                return f"主队{odds_val}"
+            elif '客队' in message or 'away' in alert_type:
+                return f"客队{odds_val}"
+            elif '大球' in message or 'over' in alert_type:
+                return f"大球{odds_val}"
+            elif '小球' in message or 'under' in alert_type:
+                return f"小球{odds_val}"
+            return odds_val
+        return ''
+
+    @staticmethod
+    def _get_alert_type_full_name(alert_type):
+        """获取告警类型的完整中文名称（未脱敏，供邮件模板使用）"""
+        names = {
+            'goal_reached': '全场进球达标',
+            'first_half_goal': '上半场进球',
+            'second_half_goal': '下半场进球',
+            'first_half_goal_threshold': '上半场进球达标',
+            'second_half_goal_threshold': '下半场进球达标',
+            'first_half_no_goal': '上半场仅N球',
+            'second_half_no_goal': '下半场仅N球',
+            'full_match_no_goal': '全场仅N球',
+            'minute_70_goal': '70分钟进球提醒',
+            'has_goal_time_reached': '定时进球提醒',
+            'asian_home_odds': '亚盘主队水位达标',
+            'asian_away_odds': '亚盘客队水位达标',
+            'ou_over_odds': '大球水位达标',
+            'ou_under_odds': '小球水位达标',
+            'asian_handicap_change': '亚盘盘口变化',
+            'ou_handicap_change': '大小球盘口变化',
+            'handicap_change_asian': '亚盘盘口变化',
+            'handicap_change_ou': '大小球盘口变化',
+            'handicap_target_asian': '亚盘盘口到位',
+            'handicap_target_ou': '大小球盘口到位',
+            'asian_handicap_target': '亚盘盘口到位',
+            'ou_handicap_target': '大小球盘口到位',
+            'engine_crash': '监控引擎崩溃',
+            'match_ended': '比赛结束',
+            'watchdog_timeout': '看门狗超时',
+            'memory_warning': '内存警告',
+        }
+        return names.get(alert_type, alert_type)
+
+    def set_resend_mode(self, is_resend):
+        """v22新增: 设置重发模式（软件重启后重发历史告警时调用）"""
+        self._is_resend_mode = is_resend
 
     def _show_popup_on_main_thread(self, message, alert_type, timestamp):
         """
